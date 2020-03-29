@@ -1,0 +1,50 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Workspaces demo'
+
+Parameters:
+  projectName:
+    Default: workspaces
+    Description: Project name
+    Type: String
+
+  stage:
+    Default: dev
+    Description: Specify stage (dev, qa, prod, test)
+    Type: String
+    AllowedValues:
+    - dev
+    - qa
+    - prod
+    - test
+
+  username:
+    Description: Workspace user name. Must exists in Directory (i.e. in SimpeAd)
+    Type: String
+
+  workspaceBundleId:
+    Type: String
+    Default: wsb-clj85qzj1
+    Description: Workspace BundleId
+    # You can obtain Workspace Bundle ID with CLI command: aws workspaces describe-workspace-bundles --region <deployment-region> --owner AMAZON
+
+
+Resources:
+  workspace:
+    Type: AWS::WorkSpaces::Workspace
+    Properties: 
+      BundleId: !Ref workspaceBundleId
+      DirectoryId: 
+        Fn::ImportValue:
+          !Sub ${projectName}-DirectoryId-${stage}
+      RootVolumeEncryptionEnabled: true
+      Tags: 
+        - Key: Stage
+          Value: !Ref stage
+        - Key: Project
+          Value: !Ref projectName
+      UserName: !Ref username
+      UserVolumeEncryptionEnabled: true
+      WorkspaceProperties: 
+        RunningMode: AUTO_STOP
+        RunningModeAutoStopTimeoutInMinutes: 60
