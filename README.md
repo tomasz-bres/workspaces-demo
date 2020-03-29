@@ -20,14 +20,14 @@ You will need:
 ### Deploying infrastructure stack
 
 `infrastructure.template` will create following resources:
-- VPC
-- DHCP Option with DNS adresses of SimpeAD nodes
-- Two public subnets for management instance and NAT Gateway
-- Two private subnets for SimpeAD nodes
-- Two private subnets for Worksapces machines
-- Launch template and Auto Scaling Group for management instance
-- SSM document association for Domain Join automation
-- Secrets Manager secret for domain Administrator password
+* VPC
+* DHCP Option with DNS adresses of SimpeAD nodes
+* Two public subnets for management instance and NAT Gateway
+* Two private subnets for SimpeAD nodes
+* Two private subnets for Worksapces machines
+* Launch template and Auto Scaling Group for management instance
+* SSM document association for Domain Join automation
+* Secrets Manager secret for domain Administrator password
 
 #### Prameters
 
@@ -51,3 +51,6 @@ aws --region eu-west-1 cloudformation create-stack --stack-name workspaces-infra
 --capabilities CAPABILITY_NAMED_IAM
 
 ```
+
+## Authors
+* **Tomasz Bres** - *Initial work*
