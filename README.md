@@ -57,7 +57,9 @@ $ aws --region eu-west-1 cloudformation create-stack --stack-name workspaces-inf
 
 To obtain current available Bundles invoke this command:
 ``` bash
-$ aws workspaces describe-workspace-bundles --region eu-west-1 --owner AMAZON --query 'Bundles[*].{BundleId:BundleId,Name:Name,RootStorage:RootStorage.Capacity,UserStorage:UserStorage.Capacity,ComputeType:ComputeType.Name} | reverse(sort_by(@, &ComputeType))' --output table
+$ aws workspaces describe-workspace-bundles --region eu-west-1 --owner AMAZON \
+--query 'Bundles[*].{BundleId:BundleId,Name:Name,RootStorage:RootStorage.Capacity,UserStorage:UserStorage.Capacity,ComputeType:ComputeType.Name} | reverse(sort_by(@, &ComputeType))' \
+--output table
 ```
 
 ## Authors
