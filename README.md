@@ -45,11 +45,19 @@ You can use default parameters provided in the template, or specify:
 #### Deployment
 
 ```bash
-aws --region eu-west-1 cloudformation create-stack --stack-name workspaces-infrastructure \ 
+$ aws --region eu-west-1 cloudformation create-stack --stack-name workspaces-infrastructure \ 
 --template-body file://$(pwd)/infrastructure.template \
 --parameters ParameterKey=simpleAdManagementRdpAccessSourceIp,ParameterValue=$(curl ifconfig.co)/32 \
 --capabilities CAPABILITY_NAMED_IAM
+```
 
+### Deploying workspace stack
+
+#### BundleId
+
+To obtain current available Bundles invoke this command:
+``` bash
+$ aws workspaces describe-workspace-bundles --region eu-west-1 --owner AMAZON --query 'Bundles[*].{BundleId:BundleId,Name:Name,RootStorage:RootStorage.Capacity,UserStorage:UserStorage.Capacity,ComputeType:ComputeType.Name} | reverse(sort_by(@, &ComputeType))' --output table
 ```
 
 ## Authors
