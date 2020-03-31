@@ -28,7 +28,6 @@ Parameters:
     Description: Workspace BundleId
     # You can obtain Workspace Bundle ID with CLI command: aws workspaces describe-workspace-bundles --region <deployment-region> --owner AMAZON
 
-
 Resources:
   workspace:
     Type: AWS::WorkSpaces::Workspace
@@ -37,14 +36,14 @@ Resources:
       DirectoryId: 
         Fn::ImportValue:
           !Sub ${projectName}-DirectoryId-${stage}
-      RootVolumeEncryptionEnabled: true
+      RootVolumeEncryptionEnabled: false
       Tags: 
         - Key: Stage
           Value: !Ref stage
         - Key: Project
           Value: !Ref projectName
       UserName: !Ref username
-      UserVolumeEncryptionEnabled: true
+      UserVolumeEncryptionEnabled: false
       WorkspaceProperties: 
         RunningMode: AUTO_STOP
         RunningModeAutoStopTimeoutInMinutes: 60

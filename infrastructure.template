@@ -546,6 +546,195 @@ Resources:
         - Key: tag:DomainControlled
           Values: 
             - 'true'
+
+  logsAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties: 
+      Description: Logs access
+      Path: /
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement: 
+          - 
+            Action:
+              - logs:CreateLogStream
+              - logs:CreateLogGroup
+              - logs:PutLogEvents
+            Effect: Allow
+            Resource: "*"
+
+      ManagedPolicyName: !Sub ${projectName}-logs-access-${AWS::Region}-${stage}
+  
+  directoryOperationsPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties: 
+      Description: Register and deregister directory with Workspaces
+      Path: /
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - workspaces:*
+              - ds:*
+              - iam:PassRole
+              - iam:GetRole
+              - iam:CreateRole
+              - iam:PutRolePolicy
+              - workdocs:RegisterDirectory
+              - workdocs:DeregisterDirectory
+              - workdocs:AddUserToGroup
+              - workdocs:RemoveUserFromGroup
+              - ec2:CreateSubnet
+              - ec2:CreateNetworkInterface
+              - ec2:CreateInternetGateway
+              - ec2:CreateRouteTable
+              - ec2:CreateRoute
+              - ec2:CreateTags
+              - ec2:CreateSecurityGroup
+              - ec2:DescribeInternetGateways
+              - ec2:DescribeSecurityGroups
+              - ec2:DescribeRouteTables
+              - ec2:DescribeVpcs
+              - ec2:DescribeSubnets
+              - ec2:DescribeNetworkInterfaces
+              - ec2:DescribeAvailabilityZones
+              - ec2:AttachInternetGateway
+              - ec2:AssociateRouteTable
+              - ec2:AuthorizeSecurityGroupEgress
+              - ec2:AuthorizeSecurityGroupIngress
+              - ec2:DeleteSecurityGroup
+              - ec2:DeleteNetworkInterface
+              - ec2:RevokeSecurityGroupEgress
+              - ec2:RevokeSecurityGroupIngress
+            Resource: "*"
+            Effect: Allow
+
+      ManagedPolicyName: !Sub ${projectName}-directory-operations-${AWS::Region}-${stage}
+  
+  directoryOperationslambdaIamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${projectName}-directory-operations-${AWS::Region}-${stage}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: "/"
+      ManagedPolicyArns:
+        - !Ref logsAccessPolicy
+        - !Ref directoryOperationsPolicy
+
+  directoryOperationslambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code: 
+        ZipFile: |
+          import json
+          import boto3
+          import urllib.request
+          import os
+
+          WS = boto3.client('workspaces', region_name = os.environ['REGION'])
+
+          def lambda_handler(event, context):
+            
+              print(event)
+              
+              responseStatus = 'FAILED'
+              responseData = {}
+              
+              def sendResponse(responseStatus, responseData):
+                  BODY = {
+                      'StackId': event['StackId'],
+                      'RequestId': event['RequestId'],
+                      'LogicalResourceId': event['LogicalResourceId'],
+                      'Reason': 'See the details in CloudWatch Log Stream: ' + context.log_stream_name,
+                      'PhysicalResourceId': context.log_stream_name,
+                      'Status': responseStatus,
+                      'Data': responseData
+                  }
+                  HEADERS = {
+                      'Content-Type': '',
+                      'Content-Length': len(json.dumps(BODY))
+                  }
+                
+                  print('RESPONSE BODY:\n' + json.dumps(BODY))
+
+                  req =  urllib.request.Request(url=event['ResponseURL'],
+                                                data=bytes(json.dumps(BODY), encoding="utf-8"),
+                                                headers=HEADERS,
+                                                method='PUT')
+                  with urllib.request.urlopen(req) as f:
+                      pass
+                  print('Response call status:' + str(f.status))
+                  print('Response call reason:' + f.reason)
+                  print('Response call message:' + f.msg)
+              
+              def register_workspace_directory(directory_id: str, subnets_ids: list):
+                  WS.register_workspace_directory(
+                      DirectoryId=directory_id,
+                      SubnetIds=subnets_ids,
+                      EnableWorkDocs=False,
+                      EnableSelfService=False,
+                      Tenancy='SHARED',
+                  )
+
+              def deregister_workspace_directory(directory_id: str):
+                      WS.deregister_workspace_directory(
+                          DirectoryId=directory_id
+                      )
+                  
+                      sendResponse(responseStatus, responseData)
+                    
+              try:
+                  if event['RequestType'] == 'Create':
+                      register_workspace_directory(event['ResourceProperties']['directory_id'],
+                                                   event['ResourceProperties']['subnets_ids'])
+
+                  if event['RequestType'] == 'Delete':
+                      deregister_workspace_directory(event['ResourceProperties']['directory_id'])
+                  
+                  if event['RequestType'] == 'Update':
+                      print("Nothing to do for action: " + event['RequestType'])
+                  
+                  sendResponse('SUCCESS', responseData)
+                  return 'OK'
+              except Exception as e:
+                  print(e)
+                  sendResponse(responseStatus, responseData)
+                  return 'Failed'
+
+      Description: This function registers and deregisters directory with Workspaces
+      FunctionName: !Sub ${projectName}-directory-operations-${stage}
+      Handler: index.lambda_handler
+      MemorySize: 128
+      Role: !GetAtt directoryOperationslambdaIamRole.Arn
+      Runtime: python3.7
+      Timeout: 15
+      Environment:
+        Variables: 
+          REGION: !Ref AWS::Region
+  
+  directoryOperationslambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties: 
+      LogGroupName: !Sub /aws/lambda/${projectName}-directory-operations-${stage}
+      RetentionInDays: 7
+  
+  directoryToworkspacesRegistration:
+    Type: Custom::directoryToworkspacesRegistration
+    Version: "1.0"
+    Properties: 
+      ServiceToken: !GetAtt directoryOperationslambdaFunction.Arn
+      directory_id: !Ref simpleAd
+      subnets_ids: 
+        - !Ref workspacesSubA
+        - !Ref workspacesSubB
 Outputs:
   DirectoryId:
     Description: DirectoryId
