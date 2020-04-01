@@ -12,22 +12,22 @@ You will need:
 
 - AWS Account
 - `aws-cli` and `curl` installed
-- Amazon Workspaces client (https://clients.amazonworkspaces.com/)
-
+- Amazon Workspaces client (<https://clients.amazonworkspaces.com/>)
 
 ![alt text](img/diagram.png "Infrastructure diagram")
 
 ### Deploying infrastructure stack
 
 `infrastructure.template` will create following resources:
-* VPC
-* DHCP Option with DNS adresses of SimpeAD nodes
-* Two public subnets for management instance and NAT Gateway
-* Two private subnets for SimpeAD nodes
-* Two private subnets for Worksapces machines
-* Launch template and Auto Scaling Group for management instance
-* SSM document association for Domain Join automation
-* Secrets Manager secret for domain Administrator password
+
+- VPC
+- DHCP Option with DNS adresses of SimpeAD nodes
+- Two public subnets for management instance and NAT Gateway
+- Two private subnets for SimpeAD nodes
+- Two private subnets for Worksapces machines
+- Launch template and Auto Scaling Group for management instance
+- SSM document association for Domain Join automation
+- Secrets Manager secret for domain Administrator password
 
 #### Prameters
 
@@ -45,7 +45,7 @@ You can use default parameters provided in the template, or specify:
 #### Deployment
 
 ```bash
-$ aws --region eu-west-1 cloudformation create-stack --stack-name workspaces-infrastructure \ 
+$ aws --region eu-west-1 cloudformation create-stack --stack-name workspaces-infrastructure \
 --template-body file://$(pwd)/infrastructure.template \
 --parameters ParameterKey=simpleAdManagementRdpAccessSourceIp,ParameterValue=$(curl ifconfig.co)/32 \
 --capabilities CAPABILITY_NAMED_IAM
@@ -56,6 +56,7 @@ $ aws --region eu-west-1 cloudformation create-stack --stack-name workspaces-inf
 #### BundleId
 
 To obtain current available Bundles invoke this command:
+
 ``` bash
 $ aws workspaces describe-workspace-bundles --region eu-west-1 --owner AMAZON \
 --query 'Bundles[*].{BundleId:BundleId,Name:Name,RootStorage:RootStorage.Capacity,UserStorage:UserStorage.Capacity,ComputeType:ComputeType.Name} | reverse(sort_by(@, &ComputeType))' \
@@ -63,4 +64,5 @@ $ aws workspaces describe-workspace-bundles --region eu-west-1 --owner AMAZON \
 ```
 
 ## Authors
-* **Tomasz Bres** - *Initial work*
+
+- **Tomasz Bres** - *Initial work*
