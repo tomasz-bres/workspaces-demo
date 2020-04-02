@@ -63,6 +63,20 @@ $ aws workspaces describe-workspace-bundles --region eu-west-1 --owner AMAZON \
 --output table
 ```
 
+#### Prameters
+
+`workspace.template` requires two parameters:
+
+- `username` - username of user already created in SimpleAD
+- `workspaceBundleId` - ID of Workspace Bundle - check BundleId section
+
+#### Deployment
+
+``` bash
+aws --region eu-west-1 cloudformation create-stack --stack-name workspaces-tbres --template-body file://$(pwd)/workspace.template \
+--parameters ParameterKey=username,ParameterValue=tbres ParameterKey=workspaceBundleId,ParameterValue=wsb-df76rqys9
+```
+
 ## Authors
 
 - **Tomasz Bres** - *Initial work*
