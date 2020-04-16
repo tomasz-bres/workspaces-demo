@@ -1,0 +1,743 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Workspaces demo infrastructure'
+
+Parameters:
+  projectName:
+    Default: workspaces
+    Description: Project name
+    Type: String
+
+  stage:
+    Default: dev
+    Description: Specify stage (dev, qa, prod, test)
+    Type: String
+    AllowedValues:
+    - dev
+    - qa
+    - prod
+    - test
+
+  cidrPrefix:
+    Description: VPC CIDR Prefix
+    Type: String
+    Default: 10.0
+  
+  availabilityZones:
+    Description: Availability Zones to use
+    Type: CommaDelimitedList
+    Default: a,b
+
+  domainName:
+    Default: workspaces.local
+    Description: Simple AD domain name
+    Type: String
+  
+  simpleAdManagementAmiId:
+    Default: /aws/service/ami-windows-latest/Windows_Server-2019-English-Full-Base
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+  
+  simpleAdManagementInstanceType:
+    Type: String
+    Default: t2.micro
+  
+  simpleAdManagementRdpAccessSourceIp:
+    Type: String
+    Description: IP address that is allowed to access management instance via RDP
+    AllowedPattern: '^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$'
+
+Mappings:
+  subnets:
+    vpc:
+      net: "0.0"
+      mask: 16
+    publicSub:
+      net: "0.0"
+      mask: 23
+    adSub:
+      net: "10.0"
+      mask: 23
+    workspacesSub:
+      net: "20.0"
+      mask: 21
+
+Resources:
+  vpc:
+    Type: AWS::EC2::VPC
+    Properties: 
+      CidrBlock: !Sub 
+        - ${cidrPrefix}.${network}/${mask}
+        - network: !FindInMap [subnets, vpc, net]
+          mask: !FindInMap [subnets, vpc, mask]
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${projectName}-${stage}-vpc
+        - Key: stage
+          Value: !Ref stage
+        - Key: Project
+          Value: !Ref projectName
+
+  publicSubA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Join ['', [ !Ref 'AWS::Region', !Select [ 0, !Ref availabilityZones]]]
+      CidrBlock: !Select
+        - 0
+        - !Cidr 
+          - !Sub 
+            - ${cidrPrefix}.${network}/${mask}
+            - network: !FindInMap [subnets, publicSub, net]
+              mask: !FindInMap [subnets, publicSub, mask]
+          - 2
+          - 8
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${projectName}-${stage}-public-sub-a
+        - Key: Stage
+          Value: !Ref stage
+        - Key: Project
+          Value: !Ref projectName
+      VpcId: !Ref vpc
+
+  publicSubB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Join ['', [ !Ref 'AWS::Region', !Select [ 1, !Ref availabilityZones]]]
+      CidrBlock: !Select
+        - 1
+        - !Cidr 
+          - !Sub 
+            - ${cidrPrefix}.${network}/${mask}
+            - network: !FindInMap [subnets, publicSub, net]
+              mask: !FindInMap [subnets, publicSub, mask]
+          - 2
+          - 8
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${projectName}-${stage}-public-sub-b
+        - Key: Stage
+          Value: !Ref stage
+        - Key: Project
+          Value: !Ref projectName
+      VpcId: !Ref vpc
+
+  adSubA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Join ['', [ !Ref 'AWS::Region', !Select [ 0, !Ref availabilityZones]]]
+      CidrBlock: !Select
+        - 0
+        - !Cidr 
+          - !Sub 
+            - ${cidrPrefix}.${network}/${mask}
+            - network: !FindInMap [subnets, adSub, net]
+              mask: !FindInMap [subnets, adSub, mask]
+          - 2
+          - 8
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${projectName}-${stage}-ad-sub-a
+        - Key: Stage
+          Value: !Ref stage
+        - Key: Project
+          Value: !Ref projectName
+      VpcId: !Ref vpc
+
+  adSubB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Join ['', [ !Ref 'AWS::Region', !Select [ 1, !Ref availabilityZones]]]
+      CidrBlock: !Select
+        - 1
+        - !Cidr 
+          - !Sub 
+            - ${cidrPrefix}.${network}/${mask}
+            - network: !FindInMap [subnets, adSub, net]
+              mask: !FindInMap [subnets, adSub, mask]
+          - 2
+          - 8
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${projectName}-${stage}-ad-sub-b
+        - Key: Stage
+          Value: !Ref stage
+        - Key: Project
+          Value: !Ref projectName
+      VpcId: !Ref vpc
+
+  workspacesSubA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Join ['', [ !Ref 'AWS::Region', !Select [ 0, !Ref availabilityZones]]]
+      CidrBlock: !Select
+        - 0
+        - !Cidr 
+          - !Sub 
+            - ${cidrPrefix}.${network}/${mask}
+            - network: !FindInMap [subnets, workspacesSub, net]
+              mask: !FindInMap [subnets, workspacesSub, mask]
+          - 2
+          - 9
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${projectName}-${stage}-workspaces-sub-a
+        - Key: Stage
+          Value: !Ref stage
+        - Key: Project
+          Value: !Ref projectName
+      VpcId: !Ref vpc
+  
+  workspacesSubB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Join ['', [ !Ref 'AWS::Region', !Select [ 1, !Ref availabilityZones]]]
+      CidrBlock: !Select
+        - 1
+        - !Cidr 
+          - !Sub 
+            - ${cidrPrefix}.${network}/${mask}
+            - network: !FindInMap [subnets, workspacesSub, net]
+              mask: !FindInMap [subnets, workspacesSub, mask]
+          - 2
+          - 9
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${projectName}-${stage}-workspaces-sub-b
+        - Key: Stage
+          Value: !Ref stage
+        - Key: Project
+          Value: !Ref projectName
+      VpcId: !Ref vpc
+
+####################################################################
+  internetGW:
+    Type: AWS::EC2::InternetGateway
+    Properties: 
+      Tags:
+        - Key: Name
+          Value: !Sub ${projectName}-${stage}-igw
+        - Key: Stage
+          Value: !Ref stage
+        - Key: Project
+          Value: !Ref projectName
+  
+  InternetGatewayAttachement:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref vpc
+      InternetGatewayId: !Ref internetGW
+
+######################################################################
+  natGwIp:
+    Type: AWS::EC2::EIP
+    Properties:
+      Tags: 
+        - Key: Stage
+          Value: !Ref stage
+        - Key: Project
+          Value: !Ref projectName
+
+  natGw:
+    Type: AWS::EC2::NatGateway
+    Properties: 
+      AllocationId: !GetAtt natGwIp.AllocationId
+      SubnetId: !Ref publicSubA
+      Tags: 
+        - Key: Name
+          Value: !Sub ${projectName}-${stage}-nat-gw
+        - Key: Stage
+          Value: !Ref stage
+        - Key: Project
+          Value: !Ref projectName
+
+#########################################################################
+  publicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${projectName}-${stage}-route-table
+        - Key: Stage
+          Value: !Ref stage
+        - Key: Project
+          Value: !Ref projectName
+    
+  publicRoute:
+    Type: AWS::EC2::Route
+    Properties: 
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref internetGW
+      RouteTableId: !Ref publicRouteTable
+  
+  publicSubApublicRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref publicRouteTable
+      SubnetId: !Ref publicSubA
+
+  publicSubBpublicRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref publicRouteTable
+      SubnetId: !Ref publicSubB
+
+######################################################################
+
+  privateRouteTableA:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${projectName}-${stage}-private-route-table-a
+        - Key: Stage
+          Value: !Ref stage
+        - Key: Project
+          Value: !Ref projectName
+  
+  privateRouteA:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref natGw
+      RouteTableId: !Ref privateRouteTableA
+
+  adSubRouteTableAssociationA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref privateRouteTableA
+      SubnetId: !Ref adSubA
+
+  workspacesSubRouteTableAssociationA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref privateRouteTableA
+      SubnetId: !Ref workspacesSubA
+
+  privateRouteTableB:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${projectName}-${stage}-private-route-table-b
+        - Key: Stage
+          Value: !Ref stage
+        - Key: Project
+          Value: !Ref projectName
+  
+  privateRouteB:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref natGw
+      RouteTableId: !Ref privateRouteTableB
+
+  adSubRouteTableAssociationB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref privateRouteTableB
+      SubnetId: !Ref adSubB
+
+  workspacesSubRouteTableAssociationB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref privateRouteTableB
+      SubnetId: !Ref workspacesSubB
+
+
+############################################################################
+  simpleAdPassword:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub ${projectName}-simpleAd-${stage}
+      Description: "SimpleAD Master Password"
+      GenerateSecretString:
+        PasswordLength: 30
+        SecretStringTemplate: !Sub '{"username": "Administrator@${domainName}"}'
+        GenerateStringKey: 'password'
+        ExcludePunctuation: true
+      Tags:
+        - Key: Stage
+          Value: !Ref stage
+        - Key: Project
+          Value: !Ref projectName
+  
+  simpleAd:
+    Type: AWS::DirectoryService::SimpleAD
+    Properties: 
+      CreateAlias: true
+      Description: SimpleAd for workspaces
+      EnableSso: true
+      Name: !Ref domainName
+      Password: !Join ['', ['{{resolve:secretsmanager:', !Ref simpleAdPassword, ':SecretString:password}}' ]]
+      # ShortName: String
+      Size: Small
+      VpcSettings: 
+        SubnetIds: 
+          - !Ref adSubA
+          - !Ref adSubB
+        VpcId: !Ref vpc
+
+  dhcpOption:
+    Type: AWS::EC2::DHCPOptions
+    Properties: 
+      DomainName: !Ref domainName
+      DomainNameServers: 
+        - !Select [ 0, !GetAtt simpleAd.DnsIpAddresses ]
+        - !Select [ 1, !GetAtt simpleAd.DnsIpAddresses ]
+      NetbiosNameServers: 
+        - !Select [ 0, !GetAtt simpleAd.DnsIpAddresses ]
+        - !Select [ 1, !GetAtt simpleAd.DnsIpAddresses ]
+      NetbiosNodeType: 2
+      NtpServers: 
+        - !Select [ 0, !GetAtt simpleAd.DnsIpAddresses ]
+        - !Select [ 1, !GetAtt simpleAd.DnsIpAddresses ]
+      Tags: 
+        - Key: Stage
+          Value: !Ref stage
+        - Key: Project
+          Value: !Ref projectName
+
+  dhcpOptionAssociation:
+    Type: AWS::EC2::VPCDHCPOptionsAssociation
+    Properties: 
+      DhcpOptionsId: !Ref dhcpOption
+      VpcId: !Ref vpc
+
+############################################################################3
+# Management EC2 Instance
+
+  simpleAdManagementRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub ${projectName}-simpleAdManagementRole-${stage}
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/AmazonSSMDirectoryServiceAccess
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
+  
+  simpleAdManagementInstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Path: /
+      Roles:
+        - !Ref simpleAdManagementRole
+
+  simpleAdManagementRdpAccess:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: RDP Access to SimpleAd Management Instance
+      GroupName: !Sub ${projectName}-simple-Ad-management-${stage}
+      VpcId: !Ref vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: !Ref simpleAdManagementRdpAccessSourceIp
+          
+
+  simpleAdManagementLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub ${projectName}-simpleAdManagement-${stage}
+      LaunchTemplateData:
+        SecurityGroupIds:
+          - !Ref simpleAdManagementRdpAccess
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub ${projectName}-simpleAdManagement-${stage}
+              - Key: Stage
+                Value: !Ref stage
+              - Key: Project
+                Value: !Ref projectName
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: !Sub ${projectName}-simpleAdManagement-${stage}
+              - Key: Stage
+                Value: !Ref stage
+              - Key: Project
+                Value: !Ref projectName
+
+        BlockDeviceMappings: 
+          - DeviceName: "/dev/sda1"
+            Ebs:
+              DeleteOnTermination: true
+              VolumeSize: 30
+              VolumeType: gp2
+              Encrypted: true
+              KmsKeyId: !Sub arn:aws:kms:${AWS::Region}:${AWS::AccountId}:alias/aws/ebs
+        IamInstanceProfile: 
+          Name: !Ref simpleAdManagementInstanceProfile
+        ImageId: !Ref simpleAdManagementAmiId
+        InstanceType: !Ref simpleAdManagementInstanceType
+        Monitoring: 
+          Enabled: False
+        UserData:
+          Fn::Base64: |
+                <persist>true</persist>
+                <powershell>
+                Install-WindowsFeature -Name GPMC,RSAT-AD-PowerShell,RSAT-AD-AdminCenter,RSAT-ADDS-Tools,RSAT-DNS-Server
+                </powershell>
+
+  simpleAdManagementAsg:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub ${projectName}-simpleAdManagement-${stage}
+      DesiredCapacity: '0'
+      HealthCheckGracePeriod: 60
+      HealthCheckType: EC2
+      LaunchTemplate:
+        LaunchTemplateId: !Ref simpleAdManagementLaunchTemplate
+        Version:  !GetAtt simpleAdManagementLaunchTemplate.LatestVersionNumber
+      MaxSize: '1'
+      MinSize: '0'
+
+      Tags:
+        - Key: Name
+          Value: !Sub ${projectName}-simpleAdManagement-${stage}
+          PropagateAtLaunch: true
+        - Key: Stage
+          Value: !Ref stage
+          PropagateAtLaunch: true
+        - Key: Project
+          Value: !Ref projectName
+          PropagateAtLaunch: true
+        - Key: DomainControlled
+          Value: 'true'
+          PropagateAtLaunch: true
+      VPCZoneIdentifier:
+        - !Ref publicSubA
+        - !Ref publicSubB
+
+  domainJoinAssociation:
+    Type: AWS::SSM::Association
+    Properties: 
+      AssociationName: DomainJoin
+      Name: AWS-JoinDirectoryServiceDomain
+      Parameters:
+        directoryId:
+          - !Ref simpleAd
+        directoryName:
+          - !Ref domainName
+      Targets: 
+        - Key: tag:DomainControlled
+          Values: 
+            - 'true'
+
+  logsAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties: 
+      Description: Logs access
+      Path: /
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement: 
+          - 
+            Action:
+              - logs:CreateLogStream
+              - logs:CreateLogGroup
+              - logs:PutLogEvents
+            Effect: Allow
+            Resource: "*"
+
+      ManagedPolicyName: !Sub ${projectName}-logs-access-${AWS::Region}-${stage}
+  
+  directoryOperationsPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties: 
+      Description: Register and deregister directory with Workspaces
+      Path: /
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - workspaces:*
+              - ds:*
+              - iam:PassRole
+              - iam:GetRole
+              - iam:CreateRole
+              - iam:PutRolePolicy
+              - workdocs:RegisterDirectory
+              - workdocs:DeregisterDirectory
+              - workdocs:AddUserToGroup
+              - workdocs:RemoveUserFromGroup
+              - ec2:CreateSubnet
+              - ec2:CreateNetworkInterface
+              - ec2:CreateInternetGateway
+              - ec2:CreateRouteTable
+              - ec2:CreateRoute
+              - ec2:CreateTags
+              - ec2:CreateSecurityGroup
+              - ec2:DescribeInternetGateways
+              - ec2:DescribeSecurityGroups
+              - ec2:DescribeRouteTables
+              - ec2:DescribeVpcs
+              - ec2:DescribeSubnets
+              - ec2:DescribeNetworkInterfaces
+              - ec2:DescribeAvailabilityZones
+              - ec2:AttachInternetGateway
+              - ec2:AssociateRouteTable
+              - ec2:AuthorizeSecurityGroupEgress
+              - ec2:AuthorizeSecurityGroupIngress
+              - ec2:DeleteSecurityGroup
+              - ec2:DeleteNetworkInterface
+              - ec2:RevokeSecurityGroupEgress
+              - ec2:RevokeSecurityGroupIngress
+            Resource: "*"
+            Effect: Allow
+
+      ManagedPolicyName: !Sub ${projectName}-directory-operations-${AWS::Region}-${stage}
+  
+  directoryOperationslambdaIamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${projectName}-directory-operations-${AWS::Region}-${stage}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: "/"
+      ManagedPolicyArns:
+        - !Ref logsAccessPolicy
+        - !Ref directoryOperationsPolicy
+
+  directoryOperationslambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code: 
+        ZipFile: |
+          import json
+          import boto3
+          import urllib.request
+          import os
+
+          WS = boto3.client('workspaces', region_name = os.environ['REGION'])
+
+          def lambda_handler(event, context):
+            
+              print(event)
+              
+              responseStatus = 'FAILED'
+              responseData = {}
+              
+              def sendResponse(responseStatus, responseData):
+                  BODY = {
+                      'StackId': event['StackId'],
+                      'RequestId': event['RequestId'],
+                      'LogicalResourceId': event['LogicalResourceId'],
+                      'Reason': 'See the details in CloudWatch Log Stream: ' + context.log_stream_name,
+                      'PhysicalResourceId': context.log_stream_name,
+                      'Status': responseStatus,
+                      'Data': responseData
+                  }
+                  HEADERS = {
+                      'Content-Type': '',
+                      'Content-Length': len(json.dumps(BODY))
+                  }
+                
+                  print('RESPONSE BODY:\n' + json.dumps(BODY))
+
+                  req =  urllib.request.Request(url=event['ResponseURL'],
+                                                data=bytes(json.dumps(BODY), encoding="utf-8"),
+                                                headers=HEADERS,
+                                                method='PUT')
+                  with urllib.request.urlopen(req) as f:
+                      pass
+                  print('Response call status:' + str(f.status))
+                  print('Response call reason:' + f.reason)
+                  print('Response call message:' + f.msg)
+              
+              def register_workspace_directory(directory_id: str, subnets_ids: list):
+                  WS.register_workspace_directory(
+                      DirectoryId=directory_id,
+                      SubnetIds=subnets_ids,
+                      EnableWorkDocs=False,
+                      EnableSelfService=False,
+                      Tenancy='SHARED',
+                  )
+
+              def deregister_workspace_directory(directory_id: str):
+                      WS.deregister_workspace_directory(
+                          DirectoryId=directory_id
+                      )
+                  
+                      sendResponse(responseStatus, responseData)
+                    
+              try:
+                  if event['RequestType'] == 'Create':
+                      register_workspace_directory(event['ResourceProperties']['directory_id'],
+                                                   event['ResourceProperties']['subnets_ids'])
+
+                  if event['RequestType'] == 'Delete':
+                      deregister_workspace_directory(event['ResourceProperties']['directory_id'])
+                  
+                  if event['RequestType'] == 'Update':
+                      print("Nothing to do for action: " + event['RequestType'])
+                  
+                  sendResponse('SUCCESS', responseData)
+                  return 'OK'
+              except Exception as e:
+                  print(e)
+                  sendResponse(responseStatus, responseData)
+                  return 'Failed'
+
+      Description: This function registers and deregisters directory with Workspaces
+      FunctionName: !Sub ${projectName}-directory-operations-${stage}
+      Handler: index.lambda_handler
+      MemorySize: 128
+      Role: !GetAtt directoryOperationslambdaIamRole.Arn
+      Runtime: python3.7
+      Timeout: 15
+      Environment:
+        Variables: 
+          REGION: !Ref AWS::Region
+  
+  directoryOperationslambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties: 
+      LogGroupName: !Sub /aws/lambda/${projectName}-directory-operations-${stage}
+      RetentionInDays: 7
+  
+  directoryToworkspacesRegistration:
+    Type: Custom::directoryToworkspacesRegistration
+    Version: "1.0"
+    Properties: 
+      ServiceToken: !GetAtt directoryOperationslambdaFunction.Arn
+      directory_id: !Ref simpleAd
+      subnets_ids: 
+        - !Ref workspacesSubA
+        - !Ref workspacesSubB
+Outputs:
+  DirectoryId:
+    Description: DirectoryId
+    Value: !Ref simpleAd
+    Export:
+      Name: !Sub ${projectName}-DirectoryId-${stage}
